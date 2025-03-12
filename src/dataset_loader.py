@@ -39,6 +39,49 @@ def encode_text(texts):
     embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)
     return embeddings.cpu().numpy().astype(np.float32)
 
+def transcribe_audio():
+    chunk = 1024
+    format = pyaudio.paInt16
+    channels = 1 
+    rate = 16000 
+    record_seconds = 5
+    output_filename = "temp_audio.wav" 
+
+    audio = pyaudio.PyAudio()
+
+    print("\nRecording... Speak now!")
+    stream = audio.open(format=format, channels=channels,
+                        rate=rate, input=True,
+                        frames_per_buffer=chunk)
+
+    frames = []
+
+    for _ in range(0, int(rate / chunk * record_seconds)):
+        data = stream.read(chunk)
+        frames.append(data)
+
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+
+    wf = wave.open(output_filename, "wb")
+    wf.setnchannels(channels)
+    wf.setsampwidth(audio.get_sample_size(format))
+    wf.setframerate(rate)
+    wf.writeframes(b''.join(frames))
+    wf.close()
+
+    waveform, sample_rate = sf.read(output_filename, dtype="float32")
+
+    inputs = whisper_processor(waveform, sampling_rate=16000, return_tensors="pt", language="en").to(device)
+
+    with torch.no_grad():
+        predicted_ids = whisper_model.generate(inputs.input_features)
+
+    transcription = whisper_processor.decode(predicted_ids[0])
+
+    return transcription.strip()
+
 def load_images():
     global image_filenames 
     image_embeddings = []
